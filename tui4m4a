@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# このスクリプトのシンボリックリンクを解決し、実際のパスを取得
+# これにより、どこから実行されてもプロジェクトの場所が正しく特定される
+SCRIPT_PATH=$(readlink -f "$0")
+SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+
+# venvの有効化
+source "$SCRIPT_DIR/.venv/bin/activate"
+
+# main.pyを実行
+# "$@" は、tagvimコマンドに渡された引数をそのままmain.pyに引き継ぐ
+exec python3 "$SCRIPT_DIR/main.py" "$@"
