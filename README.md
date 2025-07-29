@@ -40,12 +40,20 @@ M4AファイルのメタデータをVimライクなキー操作で編集する�
     ```bash
     pip install -r requirements.txt
     ```
-
-4.  アプリケーションを実行します。
+4.  起動用ラッパースクリプトに実行権限を渡し、パスが通っている所にリンクを貼ります。
     ```bash
-    python main.py
+    chmod +x tui4m4a
+    ln -s ./tui4m4a ~/.local/bin (例)
     ```
+
+5.  `m4a`ファイルがある場所に行き、`tui4m4a`を実行します。
+    ```bash
+    cd /your/music/storage/
+    tui4m4a
+    ```
+
     カレントディレクトリにある`.m4a`ファイルが一覧表示されます。
+
 
 ---
 
