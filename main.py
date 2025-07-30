@@ -9,7 +9,6 @@ from file_io import get_m4a_files, get_tags, save_tags
 from ui import init_colors, draw_panes, draw_statusbar, draw_confirmation_dialog
 
 def perform_save(changes_cache):
-    """変更キャッシュの内容をファイルに書き込む"""
     if not changes_cache:
         return "No changes to save."
     
@@ -23,7 +22,6 @@ def perform_save(changes_cache):
     return f"Saved {count} file(s)."
 
 def vim_bulk_edit(stdscr, app_state, tag_to_edit):
-    """Vimを起動して選択されたファイルのタグを一括編集する"""
     marked_indices = sorted(list(app_state['marked_files']))
     if not marked_indices:
         app_state['status_message'] = "No files marked for bulk edit."
@@ -33,7 +31,6 @@ def vim_bulk_edit(stdscr, app_state, tag_to_edit):
 
     original_values = []
     for filename in selected_files:
-        # --- 修正: 表示用のタグバッファではなく、キャッシュとファイルを元に値を取得 ---
         current_tags = get_tags(filename) or {}
         if filename in app_state['changes_cache']:
             current_tags.update(app_state['changes_cache'][filename])
@@ -48,7 +45,6 @@ def vim_bulk_edit(stdscr, app_state, tag_to_edit):
         editor = os.getenv('EDITOR', 'vim')
         subprocess.run([editor, tmp_filename])
         
-        # cursesを再初期化
         stdscr.clear()
         curses.doupdate()
 
@@ -66,15 +62,11 @@ def vim_bulk_edit(stdscr, app_state, tag_to_edit):
                 app_state['status_message'] = "Bulk edit cancelled."
         else:
             app_state['status_message'] = "Bulk edit cancelled or no changes made."
-
     finally:
-        # 一時ファイルを確実に削除
         if 'tmp_filename' in locals() and os.path.exists(tmp_filename):
             os.unlink(tmp_filename)
-        # 画面を再描画するためにリフレッシュ
         stdscr.clear()
         stdscr.refresh()
-
 
 def main(stdscr):
     if curses.has_colors(): init_colors()
@@ -82,7 +74,9 @@ def main(stdscr):
     
     app_state = {
         'files': get_m4a_files('.'), 'selected_row': 0, 'selected_tag_idx': 0,
-        'active_pane': 0, 'display_tags': {}, 'status_message': "", 'marked_files': set(),
+        'active_pane': 0,
+        'tags_buffer': {},  # <--- 修正: 'display_tags' から 'tags_buffer' に戻す
+        'status_message': "", 'marked_files': set(),
         'edit_mode': False, 'edit_buffer': "", 'changes_cache': {},
     }
 
@@ -94,9 +88,9 @@ def main(stdscr):
                 tags_from_file = get_tags(current_file) or {}
                 if current_file in app_state['changes_cache']:
                     tags_from_file.update(app_state['changes_cache'][current_file])
-                app_state['display_tags'] = tags_from_file
-            elif not app_state['display_tags']:
-                 app_state['display_tags'] = { tag: "" for tag in TAG_MAP.values() }
+                app_state['tags_buffer'] = tags_from_file # <--- 修正: 'display_tags' から 'tags_buffer' に戻す
+            elif not app_state['tags_buffer']: # <--- 修正: 'display_tags' から 'tags_buffer' に戻す
+                 app_state['tags_buffer'] = { tag: "" for tag in TAG_MAP.values() }
 
         draw_panes(stdscr, app_state)
         draw_statusbar(stdscr, app_state)
@@ -118,7 +112,7 @@ def main(stdscr):
             if key in [curses.KEY_ENTER, 10, 13]:
                 selected_key = list(TAG_MAP.values())[app_state['selected_tag_idx']]
                 if is_batch_mode:
-                    app_state['display_tags'][selected_key] = app_state['edit_buffer']
+                    app_state['tags_buffer'][selected_key] = app_state['edit_buffer'] # <--- 修正
                 else:
                     current_file = app_state['files'][app_state['selected_row']]
                     if current_file not in app_state['changes_cache']:
@@ -130,7 +124,6 @@ def main(stdscr):
             elif key >= 32 and key < 127:
                 app_state['edit_buffer'] += chr(key)
         
-        # --- ここから通常モードのキー処理 ---
         elif key == ord('q'):
             if app_state['changes_cache']:
                 app_state['status_message'] = "E37: No write since last change (add ! to override)"
@@ -158,9 +151,9 @@ def main(stdscr):
                 else:
                     app_state['marked_files'].add(row)
                 if len(app_state['marked_files']) == 1:
-                    app_state['display_tags'] = { tag: "" for tag in TAG_MAP.values() }
+                    app_state['tags_buffer'] = {} # <--- 修正
                 elif len(app_state['marked_files']) == 0:
-                    app_state['display_tags'] = {}
+                    app_state['tags_buffer'] = {} # <--- 修正
 
         elif key in [curses.KEY_ENTER, 10, 13] and app_state['active_pane'] == 1:
             if is_batch_mode:
@@ -169,12 +162,11 @@ def main(stdscr):
             else:
                 app_state['edit_mode'] = True
                 selected_key = list(TAG_MAP.values())[app_state['selected_tag_idx']]
-                app_state['edit_buffer'] = app_state['display_tags'].get(selected_key, "")
+                app_state['edit_buffer'] = app_state['tags_buffer'].get(selected_key, "") # <--- 修正
 
         elif key == 19: # Ctrl+S
-            # バッチ編集のテンプレートの内容をキャッシュに反映
             if is_batch_mode:
-                tags_to_apply = {k: v for k, v in app_state['display_tags'].items() if v}
+                tags_to_apply = {k: v for k, v in app_state['tags_buffer'].items() if v} # <--- 修正
                 for idx in app_state['marked_files']:
                     filename = app_state['files'][idx]
                     if filename not in app_state['changes_cache']:
@@ -196,7 +188,7 @@ def main(stdscr):
             
             if command_str == 'wq':
                 if is_batch_mode:
-                    tags_to_apply = {k: v for k, v in app_state['display_tags'].items() if v}
+                    tags_to_apply = {k: v for k, v in app_state['tags_buffer'].items() if v} # <--- 修正
                     for idx in app_state['marked_files']:
                         filename = app_state['files'][idx]
                         if filename not in app_state['changes_cache']:
@@ -216,7 +208,28 @@ def main(stdscr):
                     app_state['status_message'] = "E37: No write since last change (add ! to override)"
                 else:
                     break
-            else: app_state['status_message'] = f"Not an editor command: {command_str}"
+            elif command_str == 'FilenameToTitle':
+                if not app_state['files']:
+                    app_state['status_message'] = "No files to process."
+                    continue
+
+                target_indices = app_state['marked_files'] if app_state['marked_files'] else {app_state['selected_row']}
+                
+                count = 0
+                for idx in target_indices:
+                    filename = app_state['files'][idx]
+                    new_title = os.path.splitext(filename)[0]
+                    
+                    if filename not in app_state['changes_cache']:
+                        app_state['changes_cache'][filename] = {}
+                    app_state['changes_cache'][filename]['Title'] = new_title
+                    count += 1
+                
+                app_state['status_message'] = f"Staged Title from filename for {count} file(s)."
+                if app_state['marked_files']:
+                    app_state['marked_files'].clear()
+            else: 
+                app_state['status_message'] = f"Not an editor command: {command_str}"
 
 if __name__ == '__main__':
     curses.wrapper(main)
